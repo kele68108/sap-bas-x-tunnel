@@ -5,7 +5,7 @@
 # 修复：本地监听地址的智能补全逻辑，兼容 socks5/http/tcp
 # =========================================================
 
-GITHUB_BIN_URL="https://github.com/kele35818/nodejs/raw/refs/heads/main/ech-tunnel-linux-amd64"
+GITHUB_BIN_URL="https://github.com/kele68108/sap-x-tunnel/raw/refs/heads/main/x-tunnel-linux-amd64"
 BIN_PATH="/usr/local/bin/x-tunnel"
 CONF_BASE_DIR="/etc/x-tunnel"
 SHORTCUT_CMD="/usr/local/bin/x"
