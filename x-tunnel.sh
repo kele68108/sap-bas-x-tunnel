@@ -1,24 +1,21 @@
 #!/bin/bash
 
 # =========================================================
-# X-Tunnel 管理脚本 (Linux)
+# X-Tunnel / ECH Tunnel 客户端一键管理脚本 (VPS 优化版 v2)
+# 修复：本地监听地址的智能补全逻辑，兼容 socks5/http/tcp
 # =========================================================
 
-# --- 全局变量 ---
-# 注意：这里默认保留了你脚本里的下载链接，如果需要换成你最新的 sap-x-tunnel 链接请自行替换
-GITHUB_BIN_URL="https://github.com/kele68108/sap-x-tunnel/raw/refs/heads/main/x-tunnel-linux-amd64"
-BIN_PATH="/usr/local/bin/x-tunnel"
-CONF_BASE_DIR="/etc/x-tunnel"
-SHORTCUT_CMD="/usr/local/bin/x" # 升级：符合 Linux 规范，并改为全局命令 x
+GITHUB_BIN_URL="https://github.com/kele35818/nodejs/raw/refs/heads/main/ech-tunnel-linux-amd64"
+BIN_PATH="/usr/local/bin/ech-tunnel"
+CONF_BASE_DIR="/etc/ech-tunnel"
+SHORTCUT_CMD="/usr/local/bin/x"
 
-# 颜色定义
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 SKYBLUE='\033[0;36m'
 PLAIN='\033[0m'
 
-# --- 基础工具函数 ---
 check_root() {
     if [ "$EUID" -ne 0 ]; then
         echo -e "${RED}错误: 请使用 root 用户运行此脚本！${PLAIN}"
@@ -39,7 +36,6 @@ install_dependencies() {
 }
 
 download_bin() {
-    # 智能校验：不仅看大小，还尝试执行一下看是否报错
     if [ -f "$BIN_PATH" ]; then
         if ! "$BIN_PATH" -h > /dev/null 2>&1; then
             echo -e "${YELLOW}检测到二进制文件损坏或不可执行，准备重新下载...${PLAIN}"
@@ -69,16 +65,16 @@ EOF
     fi
 }
 
-# --- 实例配置加载 ---
 load_instance_config() {
     local name=$1
     INSTANCE_NAME="$name"
     CONF_FILE="${CONF_BASE_DIR}/${INSTANCE_NAME}.conf"
     SERVICE_NAME="ech-tunnel-${INSTANCE_NAME}"
 
-    CFG_IP="104.16.1.1" # 默认 Cloudflare 优选 IP
+    CFG_IP="104.16.1.1" 
     CFG_SERVER=""
-    CFG_LISTEN="proxy://0.0.0.0:30003"
+    # 修复 1：默认监听地址改为 socks5 协议
+    CFG_LISTEN="socks5://0.0.0.0:30005"
     CFG_TOKEN=""
 
     if [ -f "$CONF_FILE" ]; then
@@ -95,14 +91,13 @@ CFG_TOKEN="${CFG_TOKEN}"
 EOF
 }
 
-# --- 服务管理函数 ---
 create_service() {
     echo -e "${YELLOW}正在配置 Systemd 服务...${PLAIN}"
     CMD_ARGS="-l ${CFG_LISTEN} -f ${CFG_SERVER} -ip ${CFG_IP}"
     if [ ! -z "$CFG_TOKEN" ]; then
         CMD_ARGS="${CMD_ARGS} -token ${CFG_TOKEN}"
     fi
-    CMD_ARGS="${CMD_ARGS} -n 4" # 默认开启 4 个多路复用长连接
+    CMD_ARGS="${CMD_ARGS} -n 4" 
 
     cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<EOF
 [Unit]
@@ -131,20 +126,22 @@ start_service() {
         return
     fi
 
-    # 智能补全协议头
     FIXED=0
     if [[ "$CFG_SERVER" != wss://* ]]; then
         CFG_SERVER="wss://${CFG_SERVER}"
         FIXED=1
     fi
-    if [[ "$CFG_LISTEN" != proxy://* && "$CFG_LISTEN" != tcp://* ]]; then
+    
+    # 修复 2：更聪明的协议补全逻辑
+    if [[ "$CFG_LISTEN" != *://* ]]; then
         if [[ "$CFG_LISTEN" =~ ^[0-9]+$ ]]; then
-            CFG_LISTEN="proxy://0.0.0.0:${CFG_LISTEN}"
+            CFG_LISTEN="socks5://0.0.0.0:${CFG_LISTEN}"
         else
-            CFG_LISTEN="proxy://${CFG_LISTEN}"
+            CFG_LISTEN="socks5://${CFG_LISTEN}"
         fi
         FIXED=1
     fi
+    
     if [ $FIXED -eq 1 ]; then
         save_config
     fi
@@ -189,7 +186,6 @@ uninstall_service() {
     fi
 }
 
-# --- 三级页面：实例配置菜单 ---
 instance_menu() {
     while true; do
         load_instance_config "$INSTANCE_NAME"
@@ -206,7 +202,6 @@ instance_menu() {
         echo -e "------------------------------------"
         
         if systemctl is-active --quiet "${SERVICE_NAME}"; then
-            # 升级：使用 systemctl 直接获取精准 PID，避免 pgrep 误杀误报
             MAIN_PID=$(systemctl show --property MainPID --value "${SERVICE_NAME}")
             echo -e " 运行状态: ${GREEN}运行中 (PID: ${MAIN_PID})${PLAIN}"
         else
@@ -232,14 +227,16 @@ instance_menu() {
                 fi
                 ;;
             3) 
-                echo -e "输入端口(如 1080) 或 IP:端口"
+                echo -e "输入端口(如 1080) 或 协议://IP:端口 (如 socks5://0.0.0.0:1080)"
                 read -p "监听地址: " i
                 if [ ! -z "$i" ]; then
-                    i=${i#proxy://}
+                    # 修复 3：用户输入逻辑智能判定
                     if [[ "$i" =~ ^[0-9]+$ ]]; then
-                        CFG_LISTEN="proxy://0.0.0.0:${i}"
+                        CFG_LISTEN="socks5://0.0.0.0:${i}"
+                    elif [[ "$i" != *://* ]]; then
+                        CFG_LISTEN="socks5://${i}"
                     else
-                        CFG_LISTEN="proxy://${i}"
+                        CFG_LISTEN="${i}"
                     fi
                     save_config
                 fi
@@ -258,7 +255,6 @@ instance_menu() {
     done
 }
 
-# --- 二级页面：查看/管理实例 ---
 list_instances() {
     while true; do
         clear
@@ -266,7 +262,6 @@ list_instances() {
         echo -e "${SKYBLUE}       实例列表 (选择以管理)${PLAIN}"
         echo -e "${SKYBLUE}====================================${PLAIN}"
         
-        # 兼容处理：如果没有配置文件，files 数组会包含一个带 * 的无效字符串
         shopt -s nullglob
         files=(${CONF_BASE_DIR}/*.conf)
         shopt -u nullglob
@@ -314,7 +309,6 @@ list_instances() {
     done
 }
 
-# --- 批量操作菜单 ---
 batch_operation() {
     clear
     echo -e "${SKYBLUE}====================================${PLAIN}"
@@ -361,7 +355,6 @@ batch_operation() {
     read -p "按回车继续..."
 }
 
-# --- 一级主菜单 ---
 main_menu() {
     while true; do
         clear
@@ -394,7 +387,6 @@ main_menu() {
     done
 }
 
-# --- 脚本入口 ---
 check_root
 install_dependencies
 download_bin 
