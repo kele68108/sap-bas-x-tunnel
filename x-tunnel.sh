@@ -1,13 +1,12 @@
 #!/bin/bash
 
 # =========================================================
-# X-Tunnel / ECH Tunnel 客户端一键管理脚本 (VPS 优化版)
-# 功能：全局快捷键 'x'、分级菜单、精准 PID 探测、文件校验
+# X-Tunnel 管理脚本 (Linux)
 # =========================================================
 
 # --- 全局变量 ---
 # 注意：这里默认保留了你脚本里的下载链接，如果需要换成你最新的 sap-x-tunnel 链接请自行替换
-GITHUB_BIN_URL="https://github.com/kele35818/nodejs/raw/refs/heads/main/ech-tunnel-linux-amd64"
+GITHUB_BIN_URL="https://github.com/kele68108/sap-x-tunnel/raw/refs/heads/main/x-tunnel-linux-amd64"
 BIN_PATH="/usr/local/bin/x-tunnel"
 CONF_BASE_DIR="/etc/x-tunnel"
 SHORTCUT_CMD="/usr/local/bin/x" # 升级：符合 Linux 规范，并改为全局命令 x
