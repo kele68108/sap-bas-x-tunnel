@@ -1,11 +1,10 @@
 #!/bin/bash
 
 # =========================================================
-# X-Tunnel 客户端一键管理脚本 (完全隔离版)
-# 修复：与 ECH 脚本路径冲突，采用独立的配置目录和进程名
+# X-Tunnel 客户端管理脚本 (独立+多路复用调节版)
+# 新增功能：支持在面板中动态修改多路复用 (-n) 并发数
 # =========================================================
 
-# --- 全局变量 (完全隔离的路径) ---
 GITHUB_BIN_URL="https://github.com/kele68108/sap-x-tunnel/raw/refs/heads/main/x-tunnel-linux-amd64"
 BIN_PATH="/usr/local/bin/x-tunnel"
 CONF_BASE_DIR="/etc/x-tunnel"
@@ -33,7 +32,6 @@ install_dependencies() {
             yum install -y wget
         fi
     fi
-    # 创建独立的配置文件夹
     mkdir -p "$CONF_BASE_DIR"
 }
 
@@ -63,7 +61,7 @@ download_bin() {
 bash $(realpath "$0")
 EOF
         chmod +x "$SHORTCUT_CMD"
-        echo -e "${GREEN}全局快捷命令 'x' 已创建！以后在终端输入 x 即可唤出本菜单。${PLAIN}"
+        echo -e "${GREEN}全局快捷命令 'x' 已创建！${PLAIN}"
     fi
 }
 
@@ -71,13 +69,13 @@ load_instance_config() {
     local name=$1
     INSTANCE_NAME="$name"
     CONF_FILE="${CONF_BASE_DIR}/${INSTANCE_NAME}.conf"
-    # 独立的 Service 命名空间
     SERVICE_NAME="x-tunnel-${INSTANCE_NAME}"
 
     CFG_IP="104.16.1.1" 
     CFG_SERVER=""
     CFG_LISTEN="socks5://0.0.0.0:30005"
     CFG_TOKEN=""
+    CFG_MUX="4" # 新增：默认并发连接数为 4
 
     if [ -f "$CONF_FILE" ]; then
         source "$CONF_FILE"
@@ -90,16 +88,16 @@ CFG_IP="${CFG_IP}"
 CFG_SERVER="${CFG_SERVER}"
 CFG_LISTEN="${CFG_LISTEN}"
 CFG_TOKEN="${CFG_TOKEN}"
+CFG_MUX="${CFG_MUX:-4}"
 EOF
 }
 
 create_service() {
     echo -e "${YELLOW}正在配置 Systemd 服务...${PLAIN}"
-    CMD_ARGS="-l ${CFG_LISTEN} -f ${CFG_SERVER} -ip ${CFG_IP}"
+    CMD_ARGS="-l ${CFG_LISTEN} -f ${CFG_SERVER} -ip ${CFG_IP} -n ${CFG_MUX:-4}"
     if [ ! -z "$CFG_TOKEN" ]; then
         CMD_ARGS="${CMD_ARGS} -token ${CFG_TOKEN}"
     fi
-    CMD_ARGS="${CMD_ARGS} -n 4" 
 
     cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<EOF
 [Unit]
@@ -200,6 +198,7 @@ instance_menu() {
         echo -e " 2. 服务端地址   : ${GREEN}${CFG_SERVER:-[未设置]}${PLAIN}"
         echo -e " 3. 本地监听地址 : ${GREEN}${CFG_LISTEN}${PLAIN}"
         echo -e " 4. Token (可选) : ${GREEN}${CFG_TOKEN:-[未设置]}${PLAIN}"
+        echo -e " 5. 并发连接数   : ${GREEN}${CFG_MUX:-4}${PLAIN} (多路复用)"
         echo -e "------------------------------------"
         
         if systemctl is-active --quiet "${SERVICE_NAME}"; then
@@ -209,13 +208,13 @@ instance_menu() {
             echo -e " 运行状态: ${RED}未运行${PLAIN}"
         fi
         echo -e "------------------------------------"
-        echo -e " 5. ${YELLOW}启动 / 重启服务${PLAIN}"
-        echo -e " 6. 停止服务"
-        echo -e " 7. 查看实时日志"
-        echo -e " 8. 卸载当前实例"
+        echo -e " 6. ${YELLOW}启动 / 重启服务${PLAIN}"
+        echo -e " 7. 停止服务"
+        echo -e " 8. 查看实时日志"
+        echo -e " 9. 卸载当前实例"
         echo -e " 0. 返回主菜单"
         echo ""
-        read -p "请选择 [0-8]: " choice
+        read -p "请选择 [0-9]: " choice
         
         case "$choice" in
             1) read -p "请输入优选IP: " i; [ ! -z "$i" ] && CFG_IP="$i" && save_config ;;
@@ -242,10 +241,22 @@ instance_menu() {
                 fi
                 ;;
             4) read -p "Token: " i; CFG_TOKEN="$i"; save_config ;;
-            5) start_service ;;
-            6) stop_service ;;
-            7) echo -e "${YELLOW}Ctrl+C 退出日志${PLAIN}"; journalctl -u "${SERVICE_NAME}" -f ;;
-            8) 
+            5) 
+                read -p "请输入并发TCP连接数(建议1-32，默认4): " i
+                if [[ "$i" =~ ^[0-9]+$ ]] && [ "$i" -ge 1 ] && [ "$i" -le 64 ]; then
+                    CFG_MUX="$i"
+                    save_config
+                    echo -e "${GREEN}并发连接数已设置为 ${i}，请重启服务生效。${PLAIN}"
+                    sleep 1
+                else
+                    echo -e "${RED}输入无效，请输入 1-64 之间的纯数字！${PLAIN}"
+                    sleep 1.5
+                fi
+                ;;
+            6) start_service ;;
+            7) stop_service ;;
+            8) echo -e "${YELLOW}Ctrl+C 退出日志${PLAIN}"; journalctl -u "${SERVICE_NAME}" -f ;;
+            9) 
                 uninstall_service
                 if [ $? -eq 0 ]; then return; fi 
                 ;;
