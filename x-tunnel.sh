@@ -1,10 +1,11 @@
 #!/bin/bash
 
 # =========================================================
-# X-Tunnel / ECH Tunnel 客户端一键管理脚本 (VPS 优化版 v2)
-# 修复：本地监听地址的智能补全逻辑，兼容 socks5/http/tcp
+# X-Tunnel 客户端一键管理脚本 (完全隔离版)
+# 修复：与 ECH 脚本路径冲突，采用独立的配置目录和进程名
 # =========================================================
 
+# --- 全局变量 (完全隔离的路径) ---
 GITHUB_BIN_URL="https://github.com/kele68108/sap-x-tunnel/raw/refs/heads/main/x-tunnel-linux-amd64"
 BIN_PATH="/usr/local/bin/x-tunnel"
 CONF_BASE_DIR="/etc/x-tunnel"
@@ -32,6 +33,7 @@ install_dependencies() {
             yum install -y wget
         fi
     fi
+    # 创建独立的配置文件夹
     mkdir -p "$CONF_BASE_DIR"
 }
 
@@ -44,7 +46,7 @@ download_bin() {
     fi
 
     if [ ! -f "$BIN_PATH" ]; then
-        echo -e "${YELLOW}正在下载核心二进制文件...${PLAIN}"
+        echo -e "${YELLOW}正在下载 X-Tunnel 核心二进制文件...${PLAIN}"
         wget --no-check-certificate -O "$BIN_PATH" "$GITHUB_BIN_URL"
         if [ $? -ne 0 ]; then
             echo -e "${RED}下载失败，请检查网络连接或 GitHub 地址！${PLAIN}"
@@ -69,11 +71,11 @@ load_instance_config() {
     local name=$1
     INSTANCE_NAME="$name"
     CONF_FILE="${CONF_BASE_DIR}/${INSTANCE_NAME}.conf"
-    SERVICE_NAME="ech-tunnel-${INSTANCE_NAME}"
+    # 独立的 Service 命名空间
+    SERVICE_NAME="x-tunnel-${INSTANCE_NAME}"
 
     CFG_IP="104.16.1.1" 
     CFG_SERVER=""
-    # 修复 1：默认监听地址改为 socks5 协议
     CFG_LISTEN="socks5://0.0.0.0:30005"
     CFG_TOKEN=""
 
@@ -101,7 +103,7 @@ create_service() {
 
     cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<EOF
 [Unit]
-Description=ECH Tunnel Client - Instance: ${INSTANCE_NAME}
+Description=X-Tunnel Client - Instance: ${INSTANCE_NAME}
 After=network-online.target
 Wants=network-online.target
 
@@ -132,7 +134,6 @@ start_service() {
         FIXED=1
     fi
     
-    # 修复 2：更聪明的协议补全逻辑
     if [[ "$CFG_LISTEN" != *://* ]]; then
         if [[ "$CFG_LISTEN" =~ ^[0-9]+$ ]]; then
             CFG_LISTEN="socks5://0.0.0.0:${CFG_LISTEN}"
@@ -230,7 +231,6 @@ instance_menu() {
                 echo -e "输入端口(如 1080) 或 协议://IP:端口 (如 socks5://0.0.0.0:1080)"
                 read -p "监听地址: " i
                 if [ ! -z "$i" ]; then
-                    # 修复 3：用户输入逻辑智能判定
                     if [[ "$i" =~ ^[0-9]+$ ]]; then
                         CFG_LISTEN="socks5://0.0.0.0:${i}"
                     elif [[ "$i" != *://* ]]; then
@@ -278,7 +278,7 @@ list_instances() {
             count=$((count+1))
             filename=$(basename -- "$conf")
             name="${filename%.*}"
-            if systemctl is-active --quiet "ech-tunnel-${name}"; then
+            if systemctl is-active --quiet "x-tunnel-${name}"; then
                 status="${GREEN}[运行中]${PLAIN}"
             else
                 status="${RED}[已停止]${PLAIN}"
@@ -341,7 +341,7 @@ batch_operation() {
     for conf in "${files[@]}"; do
         filename=$(basename -- "$conf")
         name="${filename%.*}"
-        svc="ech-tunnel-${name}"
+        svc="x-tunnel-${name}"
         
         if [ "$batch_choice" == "1" ]; then
             echo -e "正在启动 ${name} ..."
