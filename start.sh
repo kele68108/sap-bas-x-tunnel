@@ -1,6 +1,20 @@
 #!/usr/bin/env bash
 set -e
-
+# ==========================================
+# 卸载逻辑：运行 bash start.sh uninstall 触发
+# ==========================================
+if [ "$1" == "uninstall" ]; then
+    echo "[SYSTEM] 开始执行 start (X-Tunnel) 卸载程序..."
+    # 1. 杀掉占用 8080 和 8880 TCP 端口的进程
+    fuser -k -9 8080/tcp 8880/tcp >/dev/null 2>&1
+    lsof -ti:8080,8880 | xargs kill -9 >/dev/null 2>&1
+    # 2. 清理隔离目录
+    rm -rf ./tmp_xt >/dev/null 2>&1
+    # 3. 抹除 ~/.bashrc 中的自启项
+    sed -i '/start.sh/d' ~/.bashrc
+    echo "[SYSTEM] 卸载完成！start 隧道已彻底从系统中清除。"
+    exit 0
+fi
 # =========================================================
 # SAP BAS / 本地沙盒 纯 Bash 隧道启动脚本 (后台不死版)
 # =========================================================
@@ -8,10 +22,10 @@ set -e
 # 1. 变量直填区 (在这里直接写死你的配置)
 PORT="8080"
 X_TOKEN="kele666"
-ARGO_TOKEN="eyJhIjoiNTA0NmI1ODdjNmU0YmRhN2FlNTM2ZGZjZGVjM2M1NDkiLCJ0IjoiZmJkNWRjOTQtYzE1Zi00MGY4LTk5YmItNzc0OTZjOTlmMWI3IiwicyI6Ik9UazVNbVZrTkdVdFpUVTBZaTAwWW1NMkxUbGhNV1l0Wm1NMk5EWm1aREJpWkdaayJ9"   
+ARGO_TOKEN="eyJhIjoiNTA0NmI1ODdjNmU0YmRhN2FlNTM2ZGZjZGVjM2M1NDkiLCJ0IjoiNTUyMGMwOGUtZDBhNS00ZjUxLTkxYjUtODg0NGE3NzYxN2I0IiwicyI6IllqQXhNR00wTnpJdFl6WXdZUzAwTkdKaUxUZ3lNREF0T0RSaE1UY3pNVFF6WXpOayJ9"   
 
-# 内部端口，和隧道保持一致
-INTERNAL_PORT=8002
+# 内部端口，不用改
+INTERNAL_PORT=8880
 
 if [ -z "$ARGO_TOKEN" ] || [ "$ARGO_TOKEN" == "这里填入你的Cloudflare_Tunnel_Token" ]; then
     echo "[SYSTEM] 严重错误：请先在脚本代码中填入真实的 ARGO_TOKEN！"
@@ -37,7 +51,8 @@ except Exception as e:
 " >/dev/null 2>&1 &
 
 # 3. 生成随机字符串用于临时文件名
-WORK_DIR="/tmp"
+WORK_DIR="/tmp_x"
+mkdir -p "$WORK_DIR"
 XT_NAME=$(cat /dev/urandom | tr -dc 'a-z0-9' | head -c 8)
 CF_NAME=$(cat /dev/urandom | tr -dc 'a-z0-9' | head -c 8)
 XT_PATH="${WORK_DIR}/${XT_NAME}"
@@ -72,20 +87,10 @@ nohup "$CF_PATH" tunnel --edge-ip-version auto run --token "$ARGO_TOKEN" >/dev/n
 # 【修改点 4】：删除了 trap 清理逻辑
 # 【修改点 5】：删除了 wait 挂起逻辑
 
-# 7. 添加至 ~/.bashrc 实现自启动
-SCRIPT_PATH=$(readlink -f "$0")
-if [ -f "$SCRIPT_PATH" ]; then
-    if ! grep -q "bash $SCRIPT_PATH" ~/.bashrc; then
-        echo "" >> ~/.bashrc
-        echo "# Auto-run BAS Tunnel Script" >> ~/.bashrc
-        echo "nohup bash $SCRIPT_PATH >/dev/null 2>&1 &" >> ~/.bashrc
-        echo "[SYSTEM] 已成功将本脚本写入 ~/.bashrc，实现登录自启！"
-    fi
-fi
-
-# 8. 事了拂衣去
+# 7. 事了拂衣去
 echo ""
 echo "=================================================="
 echo "所有服务已成功剥离并潜入后台运行！"
 echo "脚本即将退出。"
+echo "脚本卸载命令 bash start.sh uninstall"
 echo "=================================================="
