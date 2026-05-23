@@ -51,7 +51,7 @@ except Exception as e:
 " >/dev/null 2>&1 &
 
 # 3. 生成随机字符串用于临时文件名
-WORK_DIR="/tmp_x"
+WORK_DIR="./tmp_xt"
 mkdir -p "$WORK_DIR"
 XT_NAME=$(cat /dev/urandom | tr -dc 'a-z0-9' | head -c 8)
 CF_NAME=$(cat /dev/urandom | tr -dc 'a-z0-9' | head -c 8)
