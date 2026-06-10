@@ -81,13 +81,26 @@ nohup "$XT_PATH" -l "ws://127.0.0.1:${INTERNAL_PORT}" -token "$X_TOKEN" >/dev/nu
 echo "[SYSTEM] 启动 Cloudflare Argo Tunnel..."
 nohup "$CF_PATH" tunnel --edge-ip-version auto run --token "$ARGO_TOKEN" >/dev/null 2>&1 &
 
-# 7. 阅后即焚魔法 (精准清理自身隔离区的文件)
+# 7. 添加至 ~/.bashrc 实现自启动 
+SCRIPT_PATH=$(readlink -f "$0")
+if [ -f "$SCRIPT_PATH" ]; then
+    if ! grep -q "bash $SCRIPT_PATH" ~/.bashrc; then
+        echo "" >> ~/.bashrc
+        echo "# Auto-run Proxy Script" >> ~/.bashrc
+        echo "nohup bash $SCRIPT_PATH >/dev/null 2>&1 &" >> ~/.bashrc
+        echo "=================================================="
+        echo "已成功将本脚本写入 ~/.bashrc，实现登录/开机自启"
+        echo "=================================================="
+    fi
+fi
+
+# 8. 阅后即焚魔法 (精准清理自身隔离区的文件)
 (
     sleep 90  
     rm -f "$XT_PATH" "$CF_PATH"
 ) >/dev/null 2>&1 &
 
-# 8. 事了拂衣去
+# 9. 事了拂衣去
 echo ""
 echo "=================================================="
 echo "所有服务已成功剥离并潜入后台运行！"
