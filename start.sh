@@ -81,7 +81,7 @@ nohup "$XT_PATH" -l "ws://127.0.0.1:${INTERNAL_PORT}" -token "$X_TOKEN" >/dev/nu
 echo "[SYSTEM] 启动 Cloudflare Argo Tunnel..."
 nohup "$CF_PATH" tunnel --edge-ip-version auto run --token "$ARGO_TOKEN" >/dev/null 2>&1 &
 
-# 7. 添加至 ~/.bashrc 实现自启动 
+# 7. 添加至 ~/.bashrc 实现自启动
 SCRIPT_PATH=$(readlink -f "$0")
 if [ -f "$SCRIPT_PATH" ]; then
     if ! grep -q "bash $SCRIPT_PATH" ~/.bashrc; then
